@@ -1,0 +1,48 @@
+import numpy as np
+import cv2
+
+img = cv2.imread("four.jpg")
+img = cv2.resize(img, (640, 800))
+image_copy = img.copy()
+
+# --- preprocessing (unchanged idea) ---
+img = cv2.GaussianBlur(img, (7, 7), 3)
+gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+# 🔧 change 1: invert threshold so coins become white
+ret, thresh = cv2.threshold(gray, 170, 255, cv2.THRESH_BINARY_INV)
+
+# 🔧 small noise cleanup (very small addition)
+kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
+
+# 🔧 change 2: external contours only (correct coin frame)
+contours, _ = cv2.findContours(
+    thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
+)
+
+area = {}
+for i in range(len(contours)):
+    cnt = contours[i]
+    ar = cv2.contourArea(cnt)
+    area[i] = ar
+
+srt = sorted(area.items(), key=lambda x: x[1], reverse=True)
+results = np.array(srt).astype("int")
+
+# 🔧 area threshold tuned for coins
+num = np.argwhere(results[:, 1] > 800).shape[0]
+
+# draw correct coin frames
+for i in range(num):
+    image_copy = cv2.drawContours(
+        image_copy, contours, results[i, 0],
+        (0, 255, 0), 3
+    )
+
+print("Number of coins is", num)
+
+cv2.imshow("final", image_copy)
+
+cv2.waitKey(0)
+cv2.destroyAllWindows()
