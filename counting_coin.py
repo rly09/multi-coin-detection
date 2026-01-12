@@ -1,48 +1,70 @@
-import numpy as np
 import cv2
+import numpy as np
 
-img = cv2.imread("four.jpg")
+img = cv2.imread("images/20.jpg")
 img = cv2.resize(img, (640, 800))
-image_copy = img.copy()
+output = img.copy()
 
-# --- preprocessing (unchanged idea) ---
-img = cv2.GaussianBlur(img, (7, 7), 3)
+# ---------------- GRAYSCALE ----------------
 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+cv2.imshow("1 - Grayscale", gray)
 
-# 🔧 change 1: invert threshold so coins become white
-ret, thresh = cv2.threshold(gray, 170, 255, cv2.THRESH_BINARY_INV)
+# ---------------- NOISE REDUCTION ----------------
+denoise = cv2.bilateralFilter(gray, 11, 17, 17)
+cv2.imshow("2 - Noise Reduction", denoise)
 
-# 🔧 small noise cleanup (very small addition)
-kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
+# ---------------- GAUSSIAN BLUR ----------------
+blur = cv2.GaussianBlur(denoise, (9, 9), 2)
+cv2.imshow("3 - Gaussian Blur", blur)
 
-# 🔧 change 2: external contours only (correct coin frame)
-contours, _ = cv2.findContours(
-    thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE
+# ---------------- CANNY EDGE ----------------
+edges = cv2.Canny(blur, 80, 200)
+cv2.imshow("4 - Canny Edge", edges)
+
+# ---------------- HOUGH CIRCLE ----------------
+circles = cv2.HoughCircles(
+    blur,
+    cv2.HOUGH_GRADIENT,
+    dp=1.2,
+    minDist=60,
+    param1=120,
+    param2=35,
+    minRadius=20,
+    maxRadius=120
 )
 
-area = {}
-for i in range(len(contours)):
-    cnt = contours[i]
-    ar = cv2.contourArea(cnt)
-    area[i] = ar
+count = 0
 
-srt = sorted(area.items(), key=lambda x: x[1], reverse=True)
-results = np.array(srt).astype("int")
+if circles is not None:
+    circles = np.round(circles[0]).astype(int)
 
-# 🔧 area threshold tuned for coins
-num = np.argwhere(results[:, 1] > 800).shape[0]
+    circles = sorted(circles, key=lambda x: x[0])
 
-# draw correct coin frames
-for i in range(num):
-    image_copy = cv2.drawContours(
-        image_copy, contours, results[i, 0],
-        (0, 255, 0), 3
-    )
+    for i, (x, y, r) in enumerate(circles):
+        count += 1
 
-print("Number of coins is", num)
+        cv2.circle(output, (x, y), r, (0, 255, 0), 3)
+        cv2.circle(output, (x, y), 3, (0, 0, 255), -1)
 
-cv2.imshow("final", image_copy)
+        cv2.putText(
+            output, str(i+1),
+            (x-10, y+10),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,(255,0,0),2
+        )
+
+# ---------------- FINAL OUTPUT ----------------
+cv2.putText(
+    output,
+    f"Total Coins: {count}",
+    (20,40),
+    cv2.FONT_HERSHEY_SIMPLEX,
+    1,(0,0,255),2
+)
+
+print("Number of coins:", count)
+
+cv2.imshow("5 - Final Coin Detection", output)
 
 cv2.waitKey(0)
 cv2.destroyAllWindows()
